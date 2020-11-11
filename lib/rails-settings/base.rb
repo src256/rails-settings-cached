@@ -1,130 +1,130 @@
 # frozen_string_literal: true
 
-require "request_store"
+#require "request_store"
 
 module RailsSettings
   class Base < ActiveRecord::Base
-    class SettingNotFound < RuntimeError; end
+    # class SettingNotFound < RuntimeError; end
 
-    SEPARATOR_REGEXP = /[\n,]+/
-    self.table_name = table_name_prefix + "settings"
+    # SEPARATOR_REGEXP = /[\n,]+/
+    # self.table_name = table_name_prefix + "settings"
 
-    # get the value field, YAML decoded
-    def value
-      YAML.load(self[:value]) if self[:value].present?
-    end
+    # # get the value field, YAML decoded
+    # def value
+    #   YAML.load(self[:value]) if self[:value].present?
+    # end
 
-    # set the value field, YAML encoded
-    def value=(new_value)
-      self[:value] = new_value.to_yaml
-    end
+    # # set the value field, YAML encoded
+    # def value=(new_value)
+    #   self[:value] = new_value.to_yaml
+    # end
 
-    def clear_cache
-      self.class.clear_cache
-    end
+    # def clear_cache
+    #   self.class.clear_cache
+    # end
 
-    class << self
-      def clear_cache
-        RequestStore.store[:rails_settings_all_settings] = nil
-        Rails.cache.delete(self.cache_key)
-      end
+    # class << self
+    #   def clear_cache
+    #     RequestStore.store[:rails_settings_all_settings] = nil
+    #     Rails.cache.delete(self.cache_key)
+    #   end
 
-      def field(key, **opts)
-        _define_field(key, default: opts[:default], type: opts[:type], readonly: opts[:readonly], separator: opts[:separator])
-      end
+    #   def field(key, **opts)
+    #     _define_field(key, default: opts[:default], type: opts[:type], readonly: opts[:readonly], separator: opts[:separator])
+    #   end
 
-      def cache_prefix(&block)
-        @cache_prefix = block
-      end
+    #   def cache_prefix(&block)
+    #     @cache_prefix = block
+    #   end
 
-      def cache_key
-        scope = ["rails-settings-cached"]
-        scope << @cache_prefix.call if @cache_prefix
-        scope.join("/")
-      end
+    #   def cache_key
+    #     scope = ["rails-settings-cached"]
+    #     scope << @cache_prefix.call if @cache_prefix
+    #     scope.join("/")
+    #   end
 
-      private
-        def _define_field(key, default: nil, type: :string, readonly: false, separator: nil)
-          if readonly
-            define_singleton_method(key) do
-              self.send(:_covert_string_to_typeof_value, type, default, separator: separator)
-            end
-          else
-            define_singleton_method(key) do
-              val = self.send(:_value_of, key)
-              result = nil
-              if !val.nil?
-                result = val
-              else
-                result = default
-                result = default.call if default.is_a?(Proc)
-              end
+      # private
+      #   def _define_field(key, default: nil, type: :string, readonly: false, separator: nil)
+      #     if readonly
+      #       define_singleton_method(key) do
+      #         self.send(:_covert_string_to_typeof_value, type, default, separator: separator)
+      #       end
+      #     else
+      #       define_singleton_method(key) do
+      #         val = self.send(:_value_of, key)
+      #         result = nil
+      #         if !val.nil?
+      #           result = val
+      #         else
+      #           result = default
+      #           result = default.call if default.is_a?(Proc)
+      #         end
 
-              result = self.send(:_covert_string_to_typeof_value, type, result, separator: separator)
+      #         result = self.send(:_covert_string_to_typeof_value, type, result, separator: separator)
 
-              result
-            end
+      #         result
+      #       end
 
-            define_singleton_method("#{key}=") do |value|
-              var_name = key.to_s
+      #       define_singleton_method("#{key}=") do |value|
+      #         var_name = key.to_s
 
-              record = find_by(var: var_name) || new(var: var_name)
-              value = self.send(:_covert_string_to_typeof_value, type, value, separator: separator)
+      #         record = find_by(var: var_name) || new(var: var_name)
+      #         value = self.send(:_covert_string_to_typeof_value, type, value, separator: separator)
 
-              record.value = value
-              record.save!
+      #         record.value = value
+      #         record.save!
 
-              value
-            end
-          end
+      #         value
+      #       end
+      #     end
 
-          if type == :boolean
-            define_singleton_method("#{key}?") do
-              self.send(key)
-            end
-          end
-        end
+      #     if type == :boolean
+      #       define_singleton_method("#{key}?") do
+      #         self.send(key)
+      #       end
+      #     end
+      #   end
 
-        def _covert_string_to_typeof_value(type, value, separator: nil)
-          return value unless value.is_a?(String) || value.is_a?(Integer)
+      #   def _covert_string_to_typeof_value(type, value, separator: nil)
+      #     return value unless value.is_a?(String) || value.is_a?(Integer)
 
-          case type
-          when :boolean
-            return value == "true" || value == "1" || value == 1 || value == true
-          when :array
-            return value.split(separator || SEPARATOR_REGEXP).reject { |str| str.empty? }
-          when :hash
-            value = YAML.load(value).to_hash rescue {}
-            value.deep_stringify_keys!
-            return value
-          when :integer
-            return value.to_i
-          else
-            value
-          end
-        end
+      #     case type
+      #     when :boolean
+      #       return value == "true" || value == "1" || value == 1 || value == true
+      #     when :array
+      #       return value.split(separator || SEPARATOR_REGEXP).reject { |str| str.empty? }
+      #     when :hash
+      #       value = YAML.load(value).to_hash rescue {}
+      #       value.deep_stringify_keys!
+      #       return value
+      #     when :integer
+      #       return value.to_i
+      #     else
+      #       value
+      #     end
+      #   end
 
-        def _value_of(var_name)
-          raise "#{self.table_name} does not exist." unless table_exists?
+      #   def _value_of(var_name)
+      #     raise "#{self.table_name} does not exist." unless table_exists?
 
-          _all_settings[var_name.to_s]
-        end
+      #     _all_settings[var_name.to_s]
+      #   end
 
-        def rails_initialized?
-          Rails.application && Rails.application.initialized?
-        end
+      #   def rails_initialized?
+      #     Rails.application && Rails.application.initialized?
+      #   end
 
-        def _all_settings
-          raise "You cannot use settings before Rails initialize." unless rails_initialized?
-          RequestStore.store[:rails_settings_all_settings] ||= begin
-            Rails.cache.fetch(self.cache_key, expires_in: 1.week) do
-              vars = unscoped.select("var, value")
-              result = {}
-              vars.each { |record| result[record.var] = record.value }
-              result.with_indifferent_access
-            end
-          end
-        end
-    end
+      #   def _all_settings
+      #     raise "You cannot use settings before Rails initialize." unless rails_initialized?
+      #     RequestStore.store[:rails_settings_all_settings] ||= begin
+      #       Rails.cache.fetch(self.cache_key, expires_in: 1.week) do
+      #         vars = unscoped.select("var, value")
+      #         result = {}
+      #         vars.each { |record| result[record.var] = record.value }
+      #         result.with_indifferent_access
+      #       end
+      #     end
+      #   end
+#    end
   end
 end
